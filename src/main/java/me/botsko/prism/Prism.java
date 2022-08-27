@@ -312,7 +312,7 @@ public class Prism extends JavaPlugin {
 
         final String dns = "jdbc:mysql://" + config.getString( "prism.mysql.hostname" ) + ":"
                 + config.getString( "prism.mysql.port" ) + "/" + config.getString( "prism.mysql.database" )
-                + "?rewriteBatchedStatements=true";
+                + "?rewriteBatchedStatements=true&useSSL=false";
         pool = new DataSource();
         pool.setDriverClassName( "com.mysql.jdbc.Driver" );
         pool.setUrl( dns );
