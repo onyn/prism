@@ -168,7 +168,6 @@ public class RecordingTask implements Runnable {
                 }
 
                 // Connection valid, proceed
-                conn.setAutoCommit( false );
                 s = conn.prepareStatement(
                         "INSERT INTO " + prefix + "data (epoch,action_id,player_id,world_id,block_id,block_subid,old_block_id,old_block_subid,x,y,z) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                         Statement.RETURN_GENERATED_KEYS );
@@ -245,7 +244,6 @@ public class RecordingTask implements Runnable {
                 if( conn.isClosed() ) {
                     Prism.log( "Prism database error. We have to bail in the middle of building primary bulk insert query." );
                 } else {
-                    conn.commit();
                     Prism.debug( "Batch insert was commit: " + System.currentTimeMillis() );
                 }
 
@@ -291,7 +289,6 @@ public class RecordingTask implements Runnable {
         }
 
         try {
-            conn.setAutoCommit( false );
             s = conn.prepareStatement( "INSERT INTO " + prefix + "data_extra (data_id,data) VALUES (?,?)" );
             int i = 0;
             while ( keys.next() ) {
@@ -323,8 +320,6 @@ public class RecordingTask implements Runnable {
 
             if( conn.isClosed() ) {
                 Prism.log( "Prism database error. We have to bail in the middle of building extra data bulk insert query." );
-            } else {
-                conn.commit();
             }
 
         } catch ( final SQLException e ) {
