@@ -1,0 +1,3 @@
+This product includes unmodified shaded version of org.apache.tomcat:tomcal-juli and org.apache.tomcat:tomcat-jdbc
+which are developed at The Apache Software Foundation (http://www.apache.org/).
+The original software and related information is available at https://tomcat.apache.org/

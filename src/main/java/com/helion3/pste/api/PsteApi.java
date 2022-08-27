@@ -1,5 +1,7 @@
 package com.helion3.pste.api;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -10,9 +12,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 import javax.xml.bind.DatatypeConverter;
-
-import org.bukkit.craftbukkit.libs.com.google.gson.Gson;
-import org.bukkit.craftbukkit.libs.com.google.gson.GsonBuilder;
 
 /**
  * Handles basic PSTE.me API calls

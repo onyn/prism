@@ -1,9 +1,11 @@
 package me.botsko.prism.actions;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-import me.botsko.elixr.MaterialAliases;
+import com.helion3.prism.libs.elixr.MaterialAliases;
 import me.botsko.prism.Prism;
 import me.botsko.prism.actionlibs.ActionType;
 import me.botsko.prism.actionlibs.QueryParameters;
@@ -11,8 +13,6 @@ import me.botsko.prism.appliers.ChangeResult;
 
 import org.bukkit.Location;
 import org.bukkit.World;
-import org.bukkit.craftbukkit.libs.com.google.gson.Gson;
-import org.bukkit.craftbukkit.libs.com.google.gson.GsonBuilder;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
