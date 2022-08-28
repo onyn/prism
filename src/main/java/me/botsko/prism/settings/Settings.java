@@ -35,31 +35,18 @@ public class Settings {
      */
     public static void deleteSetting(String key, Player player) {
         String prefix = Prism.config.getString("prism.mysql.prefix");
-        Connection conn = null;
-        PreparedStatement s = null;
-        try {
-
+        try (
+            Connection conn = Prism.dbc();
+            PreparedStatement s = conn.prepareStatement("DELETE FROM " + prefix + "meta WHERE k = ?")
+        ) {
             String finalKey = key;
             if( player != null ) {
                 finalKey = getPlayerKey( player, key );
             }
-
-            conn = Prism.dbc();
-            s = conn.prepareStatement( "DELETE FROM " + prefix + "meta WHERE k = ?" );
             s.setString( 1, finalKey );
             s.executeUpdate();
-
         } catch ( final SQLException e ) {
             // plugin.logDbError( e );
-        } finally {
-            if( s != null )
-                try {
-                    s.close();
-                } catch ( final SQLException ignored ) {}
-            if( conn != null )
-                try {
-                    conn.close();
-                } catch ( final SQLException ignored ) {}
         }
     }
 
@@ -81,36 +68,26 @@ public class Settings {
      */
     public static void saveSetting(String key, String value, Player player) {
         String prefix = Prism.config.getString("prism.mysql.prefix");
-        Connection conn = null;
-        PreparedStatement s = null;
-        try {
+        try (
+            Connection conn = Prism.dbc();
+            PreparedStatement s = conn.prepareStatement("DELETE FROM " + prefix + "meta WHERE k = ?");
+            PreparedStatement s2 = conn.prepareStatement("INSERT INTO " + prefix + "meta (k,v) VALUES (?,?)")
+        ) {
 
             String finalKey = key;
             if( player != null ) {
                 finalKey = getPlayerKey( player, key );
             }
 
-            conn = Prism.dbc();
-            s = conn.prepareStatement( "DELETE FROM " + prefix + "meta WHERE k = ?" );
             s.setString( 1, finalKey );
             s.executeUpdate();
 
-            s = conn.prepareStatement( "INSERT INTO " + prefix + "meta (k,v) VALUES (?,?)" );
-            s.setString( 1, finalKey );
-            s.setString( 2, value );
-            s.executeUpdate();
+            s2.setString( 1, finalKey );
+            s2.setString( 2, value );
+            s2.executeUpdate();
 
         } catch ( final SQLException e ) {
             // plugin.logDbError( e );
-        } finally {
-            if( s != null )
-                try {
-                    s.close();
-                } catch ( final SQLException ignored ) {}
-            if( conn != null )
-                try {
-                    conn.close();
-                } catch ( final SQLException ignored ) {}
         }
     }
 
@@ -131,40 +108,25 @@ public class Settings {
     public static String getSetting(String key, Player player) {
         String prefix = Prism.config.getString("prism.mysql.prefix");
         String value = null;
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
+        try (
+            Connection conn = Prism.dbc();
+            PreparedStatement s = conn.prepareStatement("SELECT v FROM " + prefix + "meta WHERE k = ? LIMIT 0,1")
+        ) {
 
             String finalKey = key;
             if( player != null ) {
                 finalKey = getPlayerKey( player, key );
             }
 
-            conn = Prism.dbc();
-            s = conn.prepareStatement( "SELECT v FROM " + prefix + "meta WHERE k = ? LIMIT 0,1" );
             s.setString( 1, finalKey );
-            rs = s.executeQuery();
-
-            while ( rs.next() ) {
-                value = rs.getString( "v" );
+            try (ResultSet rs = s.executeQuery()) {
+                while (rs.next()) {
+                    value = rs.getString("v");
+                }
             }
 
         } catch ( final SQLException e ) {
             // plugin.logDbError( e );
-        } finally {
-            if( rs != null )
-                try {
-                    rs.close();
-                } catch ( final SQLException ignored ) {}
-            if( s != null )
-                try {
-                    s.close();
-                } catch ( final SQLException ignored ) {}
-            if( conn != null )
-                try {
-                    conn.close();
-                } catch ( final SQLException ignored ) {}
         }
         return value;
     }

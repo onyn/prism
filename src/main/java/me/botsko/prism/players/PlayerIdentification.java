@@ -207,31 +207,26 @@ public class PlayerIdentification {
 
         PrismPlayer prismPlayer = new PrismPlayer( 0, player.getUniqueId(), player.getName() );
 
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
+        try (
+            Connection conn = Prism.dbc();
+            PreparedStatement s = conn.prepareStatement("INSERT INTO " + prefix + "players (player,player_uuid) VALUES (?,UNHEX(?))" , Statement.RETURN_GENERATED_KEYS)
+        ) {
 
-            conn = Prism.dbc();
-            s = conn.prepareStatement( "INSERT INTO " + prefix + "players (player,player_uuid) VALUES (?,UNHEX(?))" , Statement.RETURN_GENERATED_KEYS);
             s.setString(1, player.getName() );
             s.setString(2, uuidToDbString( player.getUniqueId() ) );
             s.executeUpdate();
 
-            rs = s.getGeneratedKeys();
-            if (rs.next()) {
-                prismPlayer.setId(rs.getInt(1));
-                Prism.debug("Saved and loaded player " + player.getName() + " (" + player.getUniqueId() + ") into the cache.");
-                Prism.prismPlayers.put( player.getUniqueId(), new PrismPlayer( rs.getInt(1), player.getUniqueId(), player.getName() ) );
-            } else {
-                throw new SQLException("Insert statement failed - no generated key obtained.");
+            try (ResultSet rs = s.getGeneratedKeys()) {
+                if (rs.next()) {
+                    prismPlayer.setId(rs.getInt(1));
+                    Prism.debug("Saved and loaded player " + player.getName() + " (" + player.getUniqueId() + ") into the cache.");
+                    Prism.prismPlayers.put(player.getUniqueId(), new PrismPlayer(rs.getInt(1), player.getUniqueId(), player.getName()));
+                } else {
+                    throw new SQLException("Insert statement failed - no generated key obtained.");
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
-        } finally {
-            if(rs != null) try { rs.close(); } catch (SQLException e) {}
-            if(s != null) try { s.close(); } catch (SQLException e) {}
-            if(conn != null) try { conn.close(); } catch (SQLException e) {}
         }
         return prismPlayer;
     }
@@ -250,31 +245,26 @@ public class PlayerIdentification {
 
         PrismPlayer fakePlayer = new PrismPlayer( 0, UUID.randomUUID(), playerName );
 
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
 
-            conn = Prism.dbc();
-            s = conn.prepareStatement( "INSERT INTO " + prefix + "players (player,player_uuid) VALUES (?,UNHEX(?))" , Statement.RETURN_GENERATED_KEYS);
+        try (
+            Connection conn = Prism.dbc();
+            PreparedStatement s = conn.prepareStatement("INSERT INTO " + prefix + "players (player,player_uuid) VALUES (?,UNHEX(?))" , Statement.RETURN_GENERATED_KEYS)
+        ) {
             s.setString(1, fakePlayer.getName() );
             s.setString(2, uuidToDbString( fakePlayer.getUUID() ) );
             s.executeUpdate();
 
-            rs = s.getGeneratedKeys();
-            if (rs.next()){
-                fakePlayer.setId( rs.getInt(1) );
-                Prism.debug("Saved and loaded fake player " + fakePlayer.getName() + " into the cache.");
-                Prism.prismPlayers.put( fakePlayer.getUUID(), fakePlayer );
-            } else {
-                throw new SQLException("Insert statement failed - no generated key obtained.");
+            try (ResultSet rs = s.getGeneratedKeys()) {
+                if (rs.next()) {
+                    fakePlayer.setId(rs.getInt(1));
+                    Prism.debug("Saved and loaded fake player " + fakePlayer.getName() + " into the cache.");
+                    Prism.prismPlayers.put(fakePlayer.getUUID(), fakePlayer);
+                } else {
+                    throw new SQLException("Insert statement failed - no generated key obtained.");
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
-        } finally {
-            if(rs != null) try { rs.close(); } catch (SQLException e) {}
-            if(s != null) try { s.close(); } catch (SQLException e) {}
-            if(conn != null) try { conn.close(); } catch (SQLException e) {}
         }
         return fakePlayer;
     }
@@ -287,13 +277,10 @@ public class PlayerIdentification {
     protected static void updatePlayer( PrismPlayer prismPlayer ){
         String prefix = Prism.config.getString("prism.mysql.prefix");
 
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
-
-            conn = Prism.dbc();
-            s = conn.prepareStatement( "UPDATE " + prefix + "players SET player = ?, player_uuid = UNHEX(?) WHERE player_id = ?");
+        try (
+            Connection conn = Prism.dbc();
+            PreparedStatement s = conn.prepareStatement("UPDATE " + prefix + "players SET player = ?, player_uuid = UNHEX(?) WHERE player_id = ?")
+        ) {
             s.setString(1, prismPlayer.getName() );
             s.setString(2, uuidToDbString( prismPlayer.getUUID() ) );
             s.setInt(3, prismPlayer.getId() );
@@ -301,10 +288,6 @@ public class PlayerIdentification {
 
         } catch (SQLException e) {
             e.printStackTrace();
-        } finally {
-            if(rs != null) try { rs.close(); } catch (SQLException e) {}
-            if(s != null) try { s.close(); } catch (SQLException e) {}
-            if(conn != null) try { conn.close(); } catch (SQLException e) {}
         }
     }
 
@@ -315,25 +298,18 @@ public class PlayerIdentification {
     protected static PrismPlayer lookupByName( String playerName ){
         String prefix = Prism.config.getString("prism.mysql.prefix");
         PrismPlayer prismPlayer = null;
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
-
-            conn = Prism.dbc();
-            s = conn.prepareStatement( "SELECT player_id, player, HEX(player_uuid) FROM " + prefix + "players WHERE player = ?" );
+        try (
+            Connection conn = Prism.dbc();
+            PreparedStatement s = conn.prepareStatement("SELECT player_id, player, HEX(player_uuid) FROM " + prefix + "players WHERE player = ?")
+        ) {
             s.setString(1, playerName);
-            rs = s.executeQuery();
-
-            if( rs.next() ){
-                prismPlayer = new PrismPlayer( rs.getInt(1), uuidFromDbString(rs.getString(3)), rs.getString(2) );
+            try (ResultSet rs = s.executeQuery()) {
+                if (rs.next()) {
+                    prismPlayer = new PrismPlayer(rs.getInt(1), uuidFromDbString(rs.getString(3)), rs.getString(2));
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
-        } finally {
-            if(rs != null) try { rs.close(); } catch (SQLException e) {}
-            if(s != null) try { s.close(); } catch (SQLException e) {}
-            if(conn != null) try { conn.close(); } catch (SQLException e) {}
         }
         return prismPlayer;
     }
@@ -345,25 +321,18 @@ public class PlayerIdentification {
     protected static PrismPlayer lookupByUUID( UUID uuid ){
         String prefix = Prism.config.getString("prism.mysql.prefix");
         PrismPlayer prismPlayer = null;
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
-
-            conn = Prism.dbc();
-            s = conn.prepareStatement( "SELECT player_id, player, HEX(player_uuid) FROM " + prefix + "players WHERE player_uuid = UNHEX(?)" );
+        try (
+            Connection conn = Prism.dbc();
+            PreparedStatement s = conn.prepareStatement("SELECT player_id, player, HEX(player_uuid) FROM " + prefix + "players WHERE player_uuid = UNHEX(?)")
+        ) {
             s.setString(1, uuidToDbString(uuid));
-            rs = s.executeQuery();
-
-            if( rs.next() ){
-                prismPlayer = new PrismPlayer( rs.getInt(1), uuidFromDbString(rs.getString(3)), rs.getString(2) );
+            try (ResultSet rs = s.executeQuery()) {
+                if (rs.next()) {
+                    prismPlayer = new PrismPlayer(rs.getInt(1), uuidFromDbString(rs.getString(3)), rs.getString(2));
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
-        } finally {
-            if(rs != null) try { rs.close(); } catch (SQLException e) {}
-            if(s != null) try { s.close(); } catch (SQLException e) {}
-            if(conn != null) try { conn.close(); } catch (SQLException e) {}
         }
         return prismPlayer;
     }
@@ -383,27 +352,20 @@ public class PlayerIdentification {
             i++;
         }
 
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
-
-            conn = Prism.dbc();
-            s = conn.prepareStatement( "SELECT player_id, player, HEX(player_uuid) FROM " + prefix + "players WHERE player IN (?)" );
+        try (
+            Connection conn = Prism.dbc();
+            PreparedStatement s = conn.prepareStatement("SELECT player_id, player, HEX(player_uuid) FROM " + prefix + "players WHERE player IN (?)")
+        ) {
             s.setString(1, "'"+TypeUtils.join(playerNames, "','")+"'");
-            rs = s.executeQuery();
-
-            while( rs.next() ){
-                PrismPlayer prismPlayer = new PrismPlayer( rs.getInt(1), uuidFromDbString(rs.getString(3)), rs.getString(2) );
-                Prism.debug("Loaded player " + rs.getString(2) + ", id: " + rs.getInt(1) + " into the cache.");
-                Prism.prismPlayers.put( UUID.fromString(rs.getString(2)), prismPlayer );
+            try (ResultSet rs = s.executeQuery()) {
+                while (rs.next()) {
+                    PrismPlayer prismPlayer = new PrismPlayer(rs.getInt(1), uuidFromDbString(rs.getString(3)), rs.getString(2));
+                    Prism.debug("Loaded player " + rs.getString(2) + ", id: " + rs.getInt(1) + " into the cache.");
+                    Prism.prismPlayers.put(UUID.fromString(rs.getString(2)), prismPlayer);
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
-        } finally {
-            if(rs != null) try { rs.close(); } catch (SQLException e) {}
-            if(s != null) try { s.close(); } catch (SQLException e) {}
-            if(conn != null) try { conn.close(); } catch (SQLException e) {}
         }
     }
 }

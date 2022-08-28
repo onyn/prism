@@ -143,21 +143,15 @@ public class Prism extends JavaPlugin {
 
         // init db
         pool = initDbPool();
-        final Connection test_conn = dbc();
-        if( pool == null || test_conn == null ) {
+        try (Connection test_conn = dbc()) {
+            // Do nothing. This just connection test.
+        } catch (SQLException e) {
             final String[] dbDisabled = new String[3];
             dbDisabled[0] = "Prism will disable itself because it couldn't connect to a database.";
             dbDisabled[1] = "If you're using MySQL, check your config. Be sure MySQL is running.";
             dbDisabled[2] = "For help - try http://discover-prism.com/wiki/view/troubleshooting/";
-            logSection( dbDisabled );
+            logSection(dbDisabled);
             disablePlugin();
-        }
-        if( test_conn != null ) {
-            try {
-                test_conn.close();
-            } catch ( final SQLException e ) {
-                handleDatabaseException( e );
-            }
         }
 
         if( isEnabled() ) {
@@ -322,8 +316,6 @@ public class Prism extends JavaPlugin {
         pool.setMaxActive( config.getInt( "prism.database.max-pool-connections" ) );
         pool.setMaxIdle( config.getInt( "prism.database.max-idle-connections" ) );
         pool.setMaxWait( config.getInt( "prism.database.max-wait" ) );
-        pool.setRemoveAbandoned( true );
-        pool.setRemoveAbandonedTimeout( 60 );
         pool.setTestOnBorrow( true );
         pool.setValidationQuery( "/* ping */SELECT 1" );
         pool.setValidationInterval( 30000 );
@@ -356,34 +348,8 @@ public class Prism extends JavaPlugin {
      * @return
      * @throws SQLException
      */
-    public static Connection dbc() {
-        Connection con = null;
-        try {
-            con = pool.getConnection();
-        } catch ( final SQLException e ) {
-            log( "Database connection failed. " + e.getMessage() );
-            if( !e.getMessage().contains( "Pool empty" ) ) {
-                e.printStackTrace();
-            }
-        }
-        return con;
-    }
-
-    /**
-     * Attempt to reconnect to the database
-     * 
-     * @return
-     * @throws SQLException
-     */
-    protected boolean attemptToRescueConnection(SQLException e) throws SQLException {
-        if( e.getMessage().contains( "connection closed" ) ) {
-            rebuildPool();
-            if( pool != null ) {
-                final Connection conn = dbc();
-                if( conn != null && !conn.isClosed() ) { return true; }
-            }
-        }
-        return false;
+    public static Connection dbc() throws SQLException {
+        return pool.getConnection();
     }
 
     /**
@@ -391,10 +357,6 @@ public class Prism extends JavaPlugin {
 	 */
     public void handleDatabaseException(SQLException e) {
         String prefix = config.getString("prism.mysql.prefix");
-        // Attempt to rescue
-        try {
-            if( attemptToRescueConnection( e ) ) { return; }
-        } catch ( final SQLException e1 ) {}
         log( "Database connection error: " + e.getMessage() );
         if( e.getMessage().contains( "marked as crashed" ) ) {
             final String[] msg = new String[2];
@@ -410,20 +372,16 @@ public class Prism extends JavaPlugin {
      */
     protected void setupDatabase() {
         String prefix = config.getString("prism.mysql.prefix");
-        Connection conn = null;
-        Statement st = null;
-        try {
-            conn = dbc();
-            if( conn == null )
-                return;
-
+        try (
+            Connection conn = dbc();
+            Statement st = conn.createStatement()
+        ) {
             // actions
             String query = "CREATE TABLE IF NOT EXISTS `" + prefix + "actions` ("
                     + "`action_id` int(10) unsigned NOT NULL AUTO_INCREMENT," + "`action` varchar(25) NOT NULL,"
                     + "PRIMARY KEY (`action_id`)," + "UNIQUE KEY `action` (`action`)"
                     + ") ENGINE=InnoDB  DEFAULT CHARSET=utf8;";
-            st = conn.createStatement();
-            st.executeUpdate( query );
+            st.executeUpdate(query);
 
             // data
             query = "CREATE TABLE IF NOT EXISTS `" + prefix + "data` (" + "`id` int(10) unsigned NOT NULL AUTO_INCREMENT,"
@@ -440,21 +398,21 @@ public class Prism extends JavaPlugin {
             // extra prism data table (check if it exists first, so we can avoid
             // re-adding foreign key stuff)
             final DatabaseMetaData metadata = conn.getMetaData();
-            ResultSet resultSet;
-            resultSet = metadata.getTables( null, null, "" + prefix + "data_extra", null );
-            if( !resultSet.next() ) {
+            try (ResultSet resultSet = metadata.getTables(null, null, "" + prefix + "data_extra", null)) {
+                if (!resultSet.next()) {
 
-                // extra data
-                query = "CREATE TABLE IF NOT EXISTS `" + prefix + "data_extra` ("
+                    // extra data
+                    query = "CREATE TABLE IF NOT EXISTS `" + prefix + "data_extra` ("
                         + "`extra_id` int(10) unsigned NOT NULL AUTO_INCREMENT,"
                         + "`data_id` int(10) unsigned NOT NULL," + "`data` text NULL," + "`te_data` text NULL,"
                         + "PRIMARY KEY (`extra_id`)," + "KEY `data_id` (`data_id`)"
                         + ") ENGINE=InnoDB  DEFAULT CHARSET=utf8;";
-                st.executeUpdate( query );
+                    st.executeUpdate(query);
 
-                // add extra data delete cascade
-                query = "ALTER TABLE `" + prefix + "data_extra` ADD CONSTRAINT `" + prefix + "data_extra_ibfk_1` FOREIGN KEY (`data_id`) REFERENCES `" + prefix + "data` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;";
-                st.executeUpdate( query );
+                    // add extra data delete cascade
+                    query = "ALTER TABLE `" + prefix + "data_extra` ADD CONSTRAINT `" + prefix + "data_extra_ibfk_1` FOREIGN KEY (`data_id`) REFERENCES `" + prefix + "data` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;";
+                    st.executeUpdate(query);
+                }
             }
 
             // meta
@@ -487,17 +445,8 @@ public class Prism extends JavaPlugin {
                 addActionName( a );
             }
         } catch ( final SQLException e ) {
-            log( "Database connection error: " + e.getMessage() );
+            log( "Database error: " + e.getMessage() );
             e.printStackTrace();
-        } finally {
-            if( st != null )
-                try {
-                    st.close();
-                } catch ( final SQLException e ) {}
-            if( conn != null )
-                try {
-                    conn.close();
-                } catch ( final SQLException e ) {}
         }
     }
 
@@ -507,15 +456,11 @@ public class Prism extends JavaPlugin {
     protected void cacheActionPrimaryKeys() {
         String prefix = config.getString("prism.mysql.prefix");
 
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
-
-            conn = dbc();
-            s = conn.prepareStatement( "SELECT action_id, action FROM " + prefix + "actions" );
-            rs = s.executeQuery();
-
+        try (
+            Connection conn = dbc();
+            Statement s = conn.createStatement();
+            ResultSet rs = s.executeQuery("SELECT action_id, action FROM " + prefix + "actions")
+        ) {
             while ( rs.next() ) {
                 debug( "Loaded " + rs.getString( 2 ) + ", id:" + rs.getInt( 1 ) );
                 prismActions.put( rs.getString( 2 ), rs.getInt( 1 ) );
@@ -525,19 +470,6 @@ public class Prism extends JavaPlugin {
 
         } catch ( final SQLException e ) {
             handleDatabaseException( e );
-        } finally {
-            if( rs != null )
-                try {
-                    rs.close();
-                } catch ( final SQLException e ) {}
-            if( s != null )
-                try {
-                    s.close();
-                } catch ( final SQLException e ) {}
-            if( conn != null )
-                try {
-                    conn.close();
-                } catch ( final SQLException e ) {}
         }
     }
 
@@ -551,38 +483,23 @@ public class Prism extends JavaPlugin {
         if( prismActions.containsKey( actionName ) )
             return;
 
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
-
-            conn = dbc();
-            s = conn.prepareStatement( "INSERT INTO " + prefix + "actions (action) VALUES (?)", Statement.RETURN_GENERATED_KEYS );
+        try (
+            Connection conn = dbc();
+            PreparedStatement s = conn.prepareStatement("INSERT INTO " + prefix + "actions (action) VALUES (?)", Statement.RETURN_GENERATED_KEYS)
+        ) {
             s.setString( 1, actionName );
             s.executeUpdate();
 
-            rs = s.getGeneratedKeys();
-            if( rs.next() ) {
-                Prism.log( "Registering new action type to the database/cache: " + actionName + " " + rs.getInt( 1 ) );
-                prismActions.put( actionName, rs.getInt( 1 ) );
-            } else {
-                throw new SQLException( "Insert statement failed - no generated key obtained." );
+            try (ResultSet rs = s.getGeneratedKeys()) {
+                if (rs.next()) {
+                    Prism.log("Registering new action type to the database/cache: " + actionName + " " + rs.getInt(1));
+                    prismActions.put(actionName, rs.getInt(1));
+                } else {
+                    throw new SQLException("Insert statement failed - no generated key obtained.");
+                }
             }
         } catch ( final SQLException e ) {
-
-        } finally {
-            if( rs != null )
-                try {
-                    rs.close();
-                } catch ( final SQLException e ) {}
-            if( s != null )
-                try {
-                    s.close();
-                } catch ( final SQLException e ) {}
-            if( conn != null )
-                try {
-                    conn.close();
-                } catch ( final SQLException e ) {}
+            e.printStackTrace();
         }
     }
 
@@ -591,35 +508,17 @@ public class Prism extends JavaPlugin {
 	 */
     protected void cacheWorldPrimaryKeys() {
         String prefix = config.getString("prism.mysql.prefix");
-
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
-
-            conn = dbc();
-            s = conn.prepareStatement( "SELECT world_id, world FROM " + prefix + "worlds" );
-            rs = s.executeQuery();
-
+        try (
+            Connection conn = dbc();
+            PreparedStatement s = conn.prepareStatement("SELECT world_id, world FROM " + prefix + "worlds");
+            ResultSet rs = s.executeQuery()
+        ) {
             while ( rs.next() ) {
                 prismWorlds.put( rs.getString( 2 ), rs.getInt( 1 ) );
             }
             debug( "Loaded " + prismWorlds.size() + " worlds into the cache." );
         } catch ( final SQLException e ) {
             handleDatabaseException( e );
-        } finally {
-            if( rs != null )
-                try {
-                    rs.close();
-                } catch ( final SQLException e ) {}
-            if( s != null )
-                try {
-                    s.close();
-                } catch ( final SQLException e ) {}
-            if( conn != null )
-                try {
-                    conn.close();
-                } catch ( final SQLException e ) {}
         }
     }
 
@@ -632,38 +531,24 @@ public class Prism extends JavaPlugin {
         if( prismWorlds.containsKey( worldName ) )
             return;
 
-        Connection conn = null;
-        PreparedStatement s = null;
-        ResultSet rs = null;
-        try {
+        try (
+            Connection conn = dbc();
+            PreparedStatement s = conn.prepareStatement("INSERT INTO " + prefix + "worlds (world) VALUES (?)", Statement.RETURN_GENERATED_KEYS)
+        ) {
 
-            conn = dbc();
-            s = conn.prepareStatement( "INSERT INTO " + prefix + "worlds (world) VALUES (?)", Statement.RETURN_GENERATED_KEYS );
             s.setString( 1, worldName );
             s.executeUpdate();
 
-            rs = s.getGeneratedKeys();
-            if( rs.next() ) {
-                Prism.log( "Registering new world to the database/cache: " + worldName + " " + rs.getInt( 1 ) );
-                prismWorlds.put( worldName, rs.getInt( 1 ) );
-            } else {
-                throw new SQLException( "Insert statement failed - no generated key obtained." );
+            try (ResultSet rs = s.getGeneratedKeys()) {
+                if (rs.next()) {
+                    Prism.log("Registering new world to the database/cache: " + worldName + " " + rs.getInt(1));
+                    prismWorlds.put(worldName, rs.getInt(1));
+                } else {
+                    throw new SQLException("Insert statement failed - no generated key obtained.");
+                }
             }
         } catch ( final SQLException e ) {
-
-        } finally {
-            if( rs != null )
-                try {
-                    rs.close();
-                } catch ( final SQLException e ) {}
-            if( s != null )
-                try {
-                    s.close();
-                } catch ( final SQLException e ) {}
-            if( conn != null )
-                try {
-                    conn.close();
-                } catch ( final SQLException e ) {}
+            e.printStackTrace();
         }
     }
 

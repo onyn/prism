@@ -19,9 +19,9 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.scheduler.BukkitScheduler;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -169,13 +169,9 @@ public class ReportCommand implements SubHandler {
 
         sender.sendMessage( Prism.messenger.playerSubduedHeaderMsg( "Attempting to check connection readiness..." ) );
 
-        Connection conn = null;
-        try {
+        try (Connection conn = Prism.dbc()) {
 
-            conn = Prism.dbc();
-            if( conn == null ) {
-                sender.sendMessage( Prism.messenger.playerError( "Pool returned NULL instead of a valid connection." ) );
-            } else if( conn.isClosed() ) {
+            if( conn.isClosed() ) {
                 sender.sendMessage( Prism.messenger.playerError( "Pool returned an already closed connection." ) );
             } else if( conn.isValid( 5 ) ) {
                 sender.sendMessage( Prism.messenger.playerSuccess( "Pool returned valid connection!" ) );
@@ -183,11 +179,6 @@ public class ReportCommand implements SubHandler {
         } catch ( final SQLException e ) {
             sender.sendMessage( Prism.messenger.playerError( "Error: " + e.getMessage() ) );
             e.printStackTrace();
-        } finally {
-            if( conn != null )
-                try {
-                    conn.close();
-                } catch ( final SQLException ignored ) {}
         }
     }
 
@@ -245,16 +236,11 @@ public class ReportCommand implements SubHandler {
                         Prism.messenger.playerSubduedHeaderMsg( "Crafting block change report for "
                                 + ChatColor.DARK_AQUA + playerName + "..." ) );
 
-                Connection conn = null;
-                PreparedStatement s = null;
-                ResultSet rs = null;
-                try {
-
-                    conn = Prism.dbc();
-                    s = conn.prepareStatement( sql );
-                    s.executeQuery();
-                    rs = s.getResultSet();
-
+                try (
+                    Connection conn = Prism.dbc();
+                    Statement s = conn.createStatement();
+                    ResultSet rs = s.executeQuery(sql)
+                ) {
                     call.getSender().sendMessage(
                             Prism.messenger.playerHeaderMsg( "Total block changes for " + ChatColor.DARK_AQUA
                                     + playerName ) );
@@ -281,19 +267,6 @@ public class ReportCommand implements SubHandler {
                     }
                 } catch ( final SQLException e ) {
                     e.printStackTrace();
-                } finally {
-                    if( rs != null )
-                        try {
-                            rs.close();
-                        } catch ( final SQLException ignored ) {}
-                    if( s != null )
-                        try {
-                            s.close();
-                        } catch ( final SQLException ignored ) {}
-                    if( conn != null )
-                        try {
-                            conn.close();
-                        } catch ( final SQLException ignored ) {}
                 }
             }
         } );
@@ -349,16 +322,11 @@ public class ReportCommand implements SubHandler {
                         Prism.messenger.playerSubduedHeaderMsg( "Crafting action type report for "
                                 + ChatColor.DARK_AQUA + playerName + "..." ) );
 
-                Connection conn = null;
-                PreparedStatement s = null;
-                ResultSet rs = null;
-                try {
-
-                    conn = Prism.dbc();
-                    s = conn.prepareStatement( sql );
-                    s.executeQuery();
-                    rs = s.getResultSet();
-
+                try (
+                    Connection conn = Prism.dbc();
+                    Statement s = conn.createStatement();
+                    ResultSet rs = s.executeQuery(sql)
+                ) {
                     call.getSender().sendMessage(
                             Prism.messenger.playerMsg( ChatColor.GRAY + TypeUtils.padStringRight( "Action", colTextLen )
                                     + TypeUtils.padStringRight( "Count", colIntLen ) ) );
@@ -378,19 +346,6 @@ public class ReportCommand implements SubHandler {
                     }
                 } catch ( final SQLException e ) {
                     e.printStackTrace();
-                } finally {
-                    if( rs != null )
-                        try {
-                            rs.close();
-                        } catch ( final SQLException ignored ) {}
-                    if( s != null )
-                        try {
-                            s.close();
-                        } catch ( final SQLException ignored ) {}
-                    if( conn != null )
-                        try {
-                            conn.close();
-                        } catch ( final SQLException ignored ) {}
                 }
             }
         } );
